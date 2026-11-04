@@ -70,21 +70,54 @@ internal class DolbyController private constructor(private val context: Context)
         }
 
     var dsOn: Boolean
-        get() = dolbyEffect.dsOn.also { dlog(TAG, "getDsOn: $it") }
+        get() {
+            val stored = PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(DolbyConstants.PREF_ENABLE, true)
+            return try {
+                if (dolbyEffect.hasControl()) {
+                    dolbyEffect.dsOn.also { dlog(TAG, "getDsOn (hw): $it") }
+                } else {
+                    stored.also { dlog(TAG, "getDsOn (stored): $it") }
+                }
+            } catch (e: Exception) {
+                stored
+            }
+        }
         set(value) {
             dlog(TAG, "setDsOn: $value")
             checkEffect()
-            dolbyEffect.dsOn = value
+            try {
+                dolbyEffect.dsOn = value
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set dsOn: ${e.message}")
+            }
             registerCallbacks = value
             if (value) setCurrentProfile()
         }
 
     var profile: Int
-        get() = dolbyEffect.profile.also { dlog(TAG, "getProfile: $it") }
+        get() {
+            val stored = PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(DolbyConstants.PREF_PROFILE, null)?.toIntOrNull()
+            return try {
+                val p = dolbyEffect.profile
+                if (p in 0..6) {
+                    p.also { dlog(TAG, "getProfile (hw): $it") }
+                } else {
+                    (stored ?: 0).also { dlog(TAG, "getProfile (stored): $it") }
+                }
+            } catch (e: Exception) {
+                stored ?: 0
+            }
+        }
         set(value) {
             dlog(TAG, "setProfile: $value")
             checkEffect()
-            dolbyEffect.profile = value
+            try {
+                dolbyEffect.profile = value
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set profile: ${e.message}")
+            }
         }
 
     init {

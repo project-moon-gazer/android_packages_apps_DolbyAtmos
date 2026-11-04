@@ -7,6 +7,7 @@
 package co.aospa.dolby
 
 import android.media.audiofx.AudioEffect
+import android.util.Log
 import co.aospa.dolby.DolbyConstants.Companion.dlog
 import co.aospa.dolby.DolbyConstants.DsParam
 import java.util.UUID
@@ -17,8 +18,12 @@ class DolbyAudioEffect(priority: Int, audioSession: Int) :
     var dsOn: Boolean
         get() = getIntParam(EFFECT_PARAM_ENABLE) == 1
         set(value) {
-            setIntParam(EFFECT_PARAM_ENABLE, if (value) 1 else 0)
-            enabled = value
+            try {
+                enabled = value
+                setIntParam(EFFECT_PARAM_ENABLE, if (value) 1 else 0)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to set dsOn: ${e.message}")
+            }
         }
 
     var profile: Int
@@ -33,19 +38,40 @@ class DolbyAudioEffect(priority: Int, audioSession: Int) :
         int32ToByteArray(param, buf, 0)
         int32ToByteArray(1, buf, 4)
         int32ToByteArray(value, buf, 8)
-        checkStatus(setParameter(EFFECT_PARAM_CPDP_VALUES, buf))
+        try {
+            val status = setParameter(EFFECT_PARAM_CPDP_VALUES, buf)
+            if (status != SUCCESS) {
+                dlog(TAG, "setIntParam($param, $value) returned status: $status")
+            }
+        } catch (e: Exception) {
+            dlog(TAG, "setIntParam($param, $value) failed: ${e.message}")
+        }
     }
 
     private fun getIntParam(param: Int): Int {
         val buf = ByteArray(12)
         int32ToByteArray(param, buf, 0)
-        checkStatus(getParameter(EFFECT_PARAM_CPDP_VALUES + param, buf))
-        return byteArrayToInt32(buf).also { dlog(TAG, "getIntParam($param): $it") }
+        return try {
+            val status = getParameter(EFFECT_PARAM_CPDP_VALUES + param, buf)
+            if (status == SUCCESS) {
+                byteArrayToInt32(buf).also { dlog(TAG, "getIntParam($param): $it") }
+            } else {
+                dlog(TAG, "getIntParam($param) returned status: $status")
+                -1
+            }
+        } catch (e: Exception) {
+            dlog(TAG, "getIntParam($param) failed: ${e.message}")
+            -1
+        }
     }
 
     fun resetProfileSpecificSettings(profile: Int = this.profile) {
         dlog(TAG, "resetProfileSpecificSettings: profile=$profile")
-        setIntParam(EFFECT_PARAM_RESET_PROFILE_SETTINGS, profile)
+        try {
+            setIntParam(EFFECT_PARAM_RESET_PROFILE_SETTINGS, profile)
+        } catch (e: Exception) {
+            dlog(TAG, "resetProfileSpecificSettings failed: ${e.message}")
+        }
     }
 
     fun setDapParameter(param: DsParam, values: IntArray, profile: Int = this.profile) {
@@ -57,7 +83,14 @@ class DolbyAudioEffect(priority: Int, audioSession: Int) :
         int32ToByteArray(profile, buf, 8)
         int32ToByteArray(param.id, buf, 12)
         int32ArrayToByteArray(values, buf, 16)
-        checkStatus(setParameter(EFFECT_PARAM_CPDP_VALUES, buf))
+        try {
+            val status = setParameter(EFFECT_PARAM_CPDP_VALUES, buf)
+            if (status != SUCCESS) {
+                dlog(TAG, "setDapParameter($param) returned status: $status")
+            }
+        } catch (e: Exception) {
+            dlog(TAG, "setDapParameter($param) failed: ${e.message}")
+        }
     }
 
     fun setDapParameter(param: DsParam, enable: Boolean, profile: Int = this.profile) =
@@ -71,8 +104,18 @@ class DolbyAudioEffect(priority: Int, audioSession: Int) :
         val length = param.length
         val buf = ByteArray((length + 2) * 4)
         val p = (param.id shl 16) + (profile shl 8) + EFFECT_PARAM_GET_PROFILE_PARAMETER
-        checkStatus(getParameter(p, buf))
-        return byteArrayToInt32Array(buf, length)
+        return try {
+            val status = getParameter(p, buf)
+            if (status == SUCCESS) {
+                byteArrayToInt32Array(buf, length)
+            } else {
+                dlog(TAG, "getDapParameter($param) returned status: $status")
+                IntArray(length)
+            }
+        } catch (e: Exception) {
+            dlog(TAG, "getDapParameter($param) failed: ${e.message}")
+            IntArray(length)
+        }
     }
 
     fun getDapParameterBool(param: DsParam, profile: Int = this.profile): Boolean =
